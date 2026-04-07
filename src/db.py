@@ -70,8 +70,17 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email_id TEXT,
                 type TEXT,
-                -- type: detection | analyse | action_auto | action_manuelle | erreur
+                -- type: detection | analyse | action_auto | action_manuelle | erreur | feedback
                 message TEXT,
+                created_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS feedbacks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_id TEXT,
+                sender_email TEXT,
+                dossier_propose TEXT,
+                dossier_corrige TEXT,
                 created_at TEXT
             );
         """)
@@ -229,3 +238,38 @@ def get_logs(limit: int = 200, offset: int = 0) -> list:
             "SELECT * FROM logs ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (limit, offset)
         ).fetchall()
+
+
+# --- Feedbacks ---
+
+def add_feedback(email_id: str, sender_email: str, dossier_propose: str, dossier_corrige: str):
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO feedbacks (email_id, sender_email, dossier_propose, dossier_corrige, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (email_id, sender_email, dossier_propose, dossier_corrige, datetime.now().isoformat()))
+
+
+def get_feedbacks_for_context(sender_email: str) -> list:
+    """Retourne les feedbacks pertinents : même expéditeur ou même domaine."""
+    domain = sender_email.split("@")[-1] if "@" in sender_email else ""
+    with get_connection() as conn:
+        # Même expéditeur en priorité, puis même domaine
+        return conn.execute("""
+            SELECT * FROM feedbacks
+            WHERE sender_email = ?
+               OR sender_email LIKE ?
+            ORDER BY
+                CASE WHEN sender_email = ? THEN 0 ELSE 1 END,
+                created_at DESC
+            LIMIT 5
+        """, (sender_email, f"%@{domain}", sender_email)).fetchall()
+
+
+def count_feedbacks_for_sender(sender_email: str, dossier_corrige: str) -> int:
+    with get_connection() as conn:
+        row = conn.execute("""
+            SELECT COUNT(*) as n FROM feedbacks
+            WHERE sender_email = ? AND dossier_corrige = ?
+        """, (sender_email, dossier_corrige)).fetchone()
+        return row["n"] if row else 0

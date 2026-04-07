@@ -1,10 +1,10 @@
 """
 Logique de décision : automatique vs validation manuelle.
 
-Règles :
-- Règle automatique explicite (config.yml) → action immédiate
-- Confiance haute + dossier existant + pas d'action requise → automatique
-- Tout le reste → en_attente (validation via interface web)
+Règles de priorité :
+1. Règle automatique explicite (config.yml ou générée depuis feedbacks)
+2. Confiance haute + dossier connu + pas d'action requise → automatique
+3. Tout le reste → en_attente (validation via interface web)
 """
 
 import db
@@ -31,15 +31,24 @@ def check_automatic_rule(sender_email: str) -> dict | None:
     return None
 
 
+def get_relevant_feedbacks(sender_email: str, subject: str) -> list:
+    """
+    Récupère les feedbacks pertinents pour contextualiser le prompt LLM.
+    Priorité : même expéditeur, puis même domaine.
+    Limite à 5 exemples maximum.
+    """
+    feedbacks = db.get_feedbacks_for_context(sender_email)
+    return feedbacks[:5]
+
+
 def apply_action(token: str, email_id: str, action: str, dossier_chemin: str | None):
     """Exécute une action sur un email via Graph API."""
-    if action in ("deplacer", "marquer_lu") and dossier_chemin:
+    if action == "deplacer" and dossier_chemin:
         dossier = db.get_dossier_by_chemin(dossier_chemin)
         if dossier:
             graph_client.move_to_folder(token, email_id, dossier["id"])
             graph_client.mark_as_read(token, email_id)
         else:
-            # Dossier inconnu — passer en validation
             db.update_email_error(email_id, f"Dossier introuvable : {dossier_chemin}")
             return
 
@@ -53,13 +62,10 @@ def apply_action(token: str, email_id: str, action: str, dossier_chemin: str | N
     db.add_log(email_id, "action_auto", f"Action automatique : {action} → {dossier_chemin}")
 
 
-def process_email(token: str, raw_email: dict, model: str):
+def analyze_and_decide(token: str, raw_email: dict, model: str):
     """
-    Pipeline complet pour un email :
-    1. Création immédiate en base (statut en_traitement)
-    2. Vérification règle automatique
-    3. Analyse LLM
-    4. Décision automatique ou mise en attente
+    Analyse LLM + décision pour un email déjà inséré en base.
+    Appelé par le worker thread.
     """
     email_id = raw_email["id"]
     sender = raw_email.get("from", {}).get("emailAddress", {})
@@ -67,25 +73,16 @@ def process_email(token: str, raw_email: dict, model: str):
     sender_email = sender.get("address", "")
     subject = raw_email.get("subject", "(sans objet)")
     body = raw_email.get("body", {}).get("content", raw_email.get("bodyPreview", ""))
-    received_at = raw_email.get("receivedDateTime", "")
 
-    # 1. Insertion immédiate — visible dans l'UI avec statut "en_traitement"
-    db.create_email_pending({
-        "id": email_id,
-        "subject": subject,
-        "sender_name": sender_name,
-        "sender_email": sender_email,
-        "received_at": received_at,
-        "body_preview": body[:500],
-    })
-    db.add_log(email_id, "detection", f"Email détecté : {subject[:80]}")
-
-    # 2. Règle automatique
+    # 1. Règle automatique → court-circuite le LLM
     regle = check_automatic_rule(sender_email)
     if regle:
         apply_action(token, email_id, regle["action"], regle.get("dossier"))
         db.add_log(email_id, "action_auto", f"Règle automatique appliquée : {regle['action']}")
         return
+
+    # 2. Feedbacks pertinents pour le prompt
+    feedbacks = get_relevant_feedbacks(sender_email, subject)
 
     # 3. Analyse LLM
     dossiers = db.get_all_dossiers()
@@ -99,7 +96,7 @@ def process_email(token: str, raw_email: dict, model: str):
     }
 
     try:
-        analysis = llm_client.analyze_email(email_data, dossiers, descriptions, model)
+        analysis = llm_client.analyze_email(email_data, dossiers, descriptions, feedbacks, model)
     except Exception as e:
         db.update_email_error(email_id, str(e))
         db.add_log(email_id, "erreur", f"Erreur LLM : {e}")
@@ -131,5 +128,45 @@ def process_email(token: str, raw_email: dict, model: str):
             apply_action(token, email_id, action, dossier_chemin)
         except Exception as e:
             db.add_log(email_id, "erreur", f"Erreur action auto : {e}")
-            # Repasser en attente si l'action échoue
-            db.update_email_decided(email_id, dossier_chemin, "erreur")
+
+
+def process_feedback(email_id: str, dossier_corrige: str, token: str):
+    """
+    Enregistre un feedback sur une action automatique incorrecte.
+    Si un expéditeur est corrigé 3 fois vers le même dossier → règle automatique.
+    """
+    email = db.get_email(email_id)
+    if not email:
+        return
+
+    sender_email = email["sender_email"]
+    dossier_propose = email["llm_dossier_propose"] or email["decision_dossier"]
+
+    db.add_feedback(
+        email_id=email_id,
+        sender_email=sender_email,
+        dossier_propose=dossier_propose,
+        dossier_corrige=dossier_corrige,
+    )
+    db.add_log(email_id, "feedback", f"Correction : {dossier_propose} → {dossier_corrige}")
+
+    # Appliquer la correction sur l'email
+    dossier = db.get_dossier_by_chemin(dossier_corrige)
+    if dossier:
+        graph_client.move_to_folder(token, email_id, dossier["id"])
+        graph_client.mark_as_read(token, email_id)
+    db.update_email_decided(email_id, dossier_corrige, "deplacer")
+
+    # Générer une règle automatique si l'expéditeur est corrigé 3 fois
+    _maybe_create_auto_rule(sender_email, dossier_corrige)
+
+
+def _maybe_create_auto_rule(sender_email: str, dossier_corrige: str):
+    """Crée une règle automatique si le pattern est répété 3 fois."""
+    count = db.count_feedbacks_for_sender(sender_email, dossier_corrige)
+    if count >= 3:
+        existing = check_automatic_rule(sender_email)
+        if not existing:
+            db.create_regle(sender_email, dossier_corrige, "deplacer")
+            db.add_log(None, "action_auto",
+                f"Règle auto créée : {sender_email} → {dossier_corrige} (après {count} corrections)")

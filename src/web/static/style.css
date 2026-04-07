@@ -113,3 +113,5 @@ main { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
 .empty-state { text-align: center; padding: 3rem; color: var(--muted); }
 .pagination { display: flex; gap: 0.5rem; margin-top: 1rem; }
 code { background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 0.875rem; }
+.feedback-form summary { cursor: pointer; }
+.feedback-form summary:hover { color: var(--warning); }

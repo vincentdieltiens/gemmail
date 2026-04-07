@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 import graph_client
 import db
 import config
+import processor
 
 app = FastAPI(title="GemMail")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
@@ -42,11 +43,13 @@ async def history(request: Request, offset: int = 0):
     emails = db.get_all_emails(limit=50, offset=offset)
     logs = db.get_logs(limit=100)
     counts = db.count_emails_by_statut()
+    dossiers = db.get_all_dossiers()
     return templates.TemplateResponse("history.html", {
         "request": request,
         "emails": emails,
         "logs": logs,
         "counts": counts,
+        "dossiers": dossiers,
         "offset": offset,
     })
 
@@ -123,6 +126,17 @@ async def ignore_email(email_id: str):
     db.update_email_decided(email_id, None, "ignorer")
     db.add_log(email_id, "action_manuelle", "Ignoré")
     return RedirectResponse("/", status_code=303)
+
+
+@app.post("/email/{email_id}/feedback")
+async def feedback_email(
+    email_id: str,
+    dossier_corrige: str = Form(...),
+):
+    """Signale une mauvaise classification automatique et applique la correction."""
+    token = _get_token()
+    processor.process_feedback(email_id, dossier_corrige, token)
+    return RedirectResponse("/history", status_code=303)
 
 
 # --- Configuration ---

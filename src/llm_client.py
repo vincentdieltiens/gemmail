@@ -10,7 +10,7 @@ ANALYSIS_PROMPT = """Tu es un assistant qui classe des emails professionnels.
 
 Voici les dossiers disponibles dans la boîte mail de l'utilisateur :
 {dossiers_context}
-
+{feedbacks_context}
 Analyse l'email suivant et réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après.
 
 Champs requis :
@@ -60,11 +60,23 @@ def _build_dossiers_context(dossiers: list, descriptions: dict) -> str:
     return "\n".join(lines) if lines else "(aucun dossier disponible)"
 
 
-def analyze_email(email: dict, dossiers: list, descriptions: dict, model: str) -> dict:
+def _build_feedbacks_context(feedbacks: list) -> str:
+    if not feedbacks:
+        return ""
+    lines = ["\nCorrections passées de l'utilisateur (tiens-en compte) :"]
+    for f in feedbacks:
+        lines.append(f"- Email de {f['sender_email']} : tu avais proposé \"{f['dossier_propose']}\","
+                     f" l'utilisateur a corrigé vers \"{f['dossier_corrige']}\"")
+    return "\n".join(lines) + "\n"
+
+
+def analyze_email(email: dict, dossiers: list, descriptions: dict, feedbacks: list, model: str) -> dict:
     dossiers_context = _build_dossiers_context(dossiers, descriptions)
+    feedbacks_context = _build_feedbacks_context(feedbacks)
 
     prompt = ANALYSIS_PROMPT.format(
         dossiers_context=dossiers_context,
+        feedbacks_context=feedbacks_context,
         sender_name=email.get("sender_name", ""),
         sender_email=email.get("sender_email", ""),
         subject=email.get("subject", ""),
