@@ -1,0 +1,79 @@
+{% for email in en_traitement %}
+<div class="email-card processing">
+  <div class="email-header">
+    <span class="status-badge processing">⏳ En traitement</span>
+    <span class="sender">{{ email.sender_name or email.sender_email }}</span>
+    <span class="date">{{ email.received_at[:10] }}</span>
+  </div>
+  <div class="email-subject">{{ email.subject }}</div>
+  <div class="email-preview muted">{{ email.body_preview[:120] }}…</div>
+</div>
+{% endfor %}
+
+{% for email in en_attente %}
+<div class="email-card waiting">
+  <div class="email-header">
+    <span class="status-badge {% if email.llm_importance == 'haute' %}high{% elif email.llm_importance == 'moyenne' %}medium{% else %}low{% endif %}">
+      {% if email.llm_importance == 'haute' %}⚠️ Important{% elif email.llm_importance == 'moyenne' %}● Moyen{% else %}○ Faible{% endif %}
+    </span>
+    <span class="sender">{{ email.sender_name or email.sender_email }}</span>
+    <span class="date">{{ email.received_at[:10] }}</span>
+  </div>
+  <div class="email-subject">{{ email.subject }}</div>
+  {% if email.llm_resume %}
+  <div class="email-resume">{{ email.llm_resume }}</div>
+  {% endif %}
+
+  <div class="llm-proposal">
+    <span class="label">Proposition LLM :</span>
+    <span class="dossier">📁 {{ email.llm_dossier_propose }}</span>
+    {% if email.llm_nouveau_dossier %}<span class="new-badge">Nouveau</span>{% endif %}
+    <span class="confiance confiance-{{ email.llm_confiance }}">Confiance : {{ email.llm_confiance }}</span>
+  </div>
+
+  {% if email.llm_reponse_proposee %}
+  <details class="reply-proposal">
+    <summary>Réponse proposée</summary>
+    <pre>{{ email.llm_reponse_proposee }}</pre>
+  </details>
+  {% endif %}
+
+  <div class="actions">
+    <form method="post" action="/email/{{ email.id }}/validate">
+      <select name="dossier">
+        {% if email.llm_dossier_propose %}
+        <option value="{{ email.llm_dossier_propose }}" selected>{{ email.llm_dossier_propose }} (proposé)</option>
+        {% endif %}
+        {% for d in dossiers %}
+        {% if d.chemin != email.llm_dossier_propose %}
+        <option value="{{ d.chemin }}">{{ d.chemin }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+      {% if email.llm_nouveau_dossier %}
+      <input type="text" name="description_nouveau" placeholder="Description du nouveau dossier (optionnel)">
+      {% endif %}
+      <button type="submit" class="btn primary">✓ Valider & déplacer</button>
+    </form>
+
+    <form method="post" action="/email/{{ email.id }}/mark-read" style="display:inline">
+      <button type="submit" class="btn secondary">Marquer lu</button>
+    </form>
+
+    <form method="post" action="/email/{{ email.id }}/ignore" style="display:inline">
+      <button type="submit" class="btn ghost">Ignorer</button>
+    </form>
+
+    <form method="post" action="/email/{{ email.id }}/delete" style="display:inline"
+      onsubmit="return confirm('Supprimer cet email ?')">
+      <button type="submit" class="btn danger">Supprimer</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+{% if not en_traitement and not en_attente %}
+<div class="empty-state">
+  <p>✅ Aucun email en attente.</p>
+</div>
+{% endif %}

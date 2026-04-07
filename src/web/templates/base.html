@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GemMail{% block title %}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">GemMail</a>
+    <div class="nav-links">
+      <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>
+        File d'attente
+        <span class="badge" id="badge-attente"
+          hx-get="/htmx/counts"
+          hx-trigger="every 10s"
+          hx-swap="none"
+          hx-on::after-request="updateBadge(event)">
+          {{ (counts.get('en_attente', 0) + counts.get('en_traitement', 0)) or '' }}
+        </span>
+      </a>
+      <a href="/history" {% if request.url.path == "/history" %}class="active"{% endif %}>Historique</a>
+      <a href="/config" {% if request.url.path == "/config" %}class="active"{% endif %}>Configuration</a>
+    </div>
+  </nav>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    function updateBadge(event) {
+      // Mise à jour du badge sans recharger la page
+      const resp = JSON.parse(event.detail.xhr.responseText || '{}');
+    }
+  </script>
+</body>
+</html>

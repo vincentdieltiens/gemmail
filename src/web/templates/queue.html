@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %} — File d'attente{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>File d'attente</h1>
+  <span class="subtitle">
+    {{ counts.get('en_attente', 0) }} en attente ·
+    {{ counts.get('en_traitement', 0) }} en traitement
+  </span>
+</div>
+
+<div id="queue-list"
+  hx-get="/htmx/queue-items"
+  hx-trigger="every 15s"
+  hx-swap="innerHTML">
+  {% include "_queue_items.html" %}
+</div>
+{% endblock %}

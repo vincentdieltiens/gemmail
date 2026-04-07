@@ -1,0 +1,53 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: gemmail-ollama
+    volumes:
+      - ./models:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/11434' 2>/dev/null && exit 0 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  daemon:
+    build:
+      context: .
+      target: daemon
+    container_name: gemmail-daemon
+    depends_on:
+      ollama:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
+      - ./config.yml:/app/config.yml
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: web
+    container_name: gemmail-web
+    depends_on:
+      - daemon
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
+      - ./config.yml:/app/config.yml
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

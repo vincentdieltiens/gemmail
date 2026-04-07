@@ -1,0 +1,32 @@
+# GemMail — Configuration
+# Copiez ce fichier en config.yml et adaptez les valeurs.
+
+# Date à partir de laquelle traiter les emails (format YYYY-MM-DD)
+# Les emails antérieurs à cette date sont ignorés.
+start_date: "2026-04-07"
+
+# Intervalle de polling en secondes
+polling_interval: 60
+
+# Modèle Ollama à utiliser
+ollama_model: gemma4:e2b
+
+# Descriptions des dossiers Outlook
+# Le chemin doit correspondre exactement au chemin du dossier dans Outlook.
+# Les sous-dossiers utilisent le format "Parent/Enfant".
+# Ces descriptions sont passées au LLM pour améliorer la classification.
+dossiers:
+  RH: "Ressources humaines, congés, paie, entretiens"
+  Finance: "Factures, bons de commande, comptabilité"
+  "Fournisseur X": "Prestataire cloud, contrats et support technique"
+  "Fournisseur X/Factures": "Factures mensuelles du fournisseur X"
+  MonProjet: "Outil interne que j'ai développé, alertes et rapports automatiques"
+
+# Règles automatiques (appliquées sans validation LLM)
+# action: deplacer | marquer_lu
+regles_automatiques:
+  - expediteur: "newsletter@example.com"
+    action: marquer_lu
+  - expediteur: "noreply@monitoring.internal"
+    dossier: "MonProjet"
+    action: deplacer

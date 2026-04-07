@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %} — Historique{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Historique</h1>
+</div>
+
+<div class="two-col">
+  <section>
+    <h2>Emails traités</h2>
+    {% for email in emails %}
+    <div class="email-card compact {{ email.statut }}">
+      <div class="email-header">
+        <span class="status-badge {{ email.statut }}">{{ email.statut }}</span>
+        <span class="sender">{{ email.sender_name or email.sender_email }}</span>
+        <span class="date">{{ email.received_at[:10] }}</span>
+      </div>
+      <div class="email-subject">{{ email.subject }}</div>
+      {% if email.llm_resume %}
+      <div class="email-resume muted">{{ email.llm_resume }}</div>
+      {% endif %}
+      {% if email.decision_dossier %}
+      <div class="muted small">→ {{ email.decision_action }} : {{ email.decision_dossier }}</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="muted">Aucun email traité.</p>
+    {% endfor %}
+
+    <div class="pagination">
+      {% if offset > 0 %}
+      <a href="/history?offset={{ offset - 50 }}" class="btn ghost">← Précédent</a>
+      {% endif %}
+      {% if emails | length == 50 %}
+      <a href="/history?offset={{ offset + 50 }}" class="btn ghost">Suivant →</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section>
+    <h2>Logs</h2>
+    <div class="log-list">
+      {% for log in logs %}
+      <div class="log-entry log-{{ log.type }}">
+        <span class="log-time">{{ log.created_at[11:19] }}</span>
+        <span class="log-type">{{ log.type }}</span>
+        <span class="log-msg">{{ log.message }}</span>
+      </div>
+      {% else %}
+      <p class="muted">Aucun log.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %} — Configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Configuration</h1>
+</div>
+
+<section class="config-section">
+  <h2>Paramètres généraux</h2>
+  <table class="config-table">
+    <tr><td>Modèle LLM</td><td><code>{{ cfg.ollama_model }}</code></td></tr>
+    <tr><td>Intervalle de polling</td><td>{{ cfg.polling_interval }}s</td></tr>
+    <tr><td>Emails depuis le</td><td>{{ cfg.start_date }}</td></tr>
+  </table>
+  <p class="muted small">Modifiez ces valeurs directement dans <code>config.yml</code>.</p>
+</section>
+
+<section class="config-section">
+  <h2>Dossiers Outlook</h2>
+  <p class="muted">Ajoutez une description pour aider le LLM à mieux classer les emails.</p>
+  <div class="dossier-list">
+    {% for d in dossiers %}
+    <div class="dossier-item">
+      <div class="dossier-path">📁 {{ d.chemin }}</div>
+      <form method="post" action="/config/dossier/{{ d.id }}/description" class="inline-form">
+        <input type="text" name="description" value="{{ d.description or '' }}"
+          placeholder="Description pour le LLM (ex: Factures du fournisseur X)">
+        <button type="submit" class="btn secondary small">Enregistrer</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="muted">Aucun dossier synchronisé. Lancez le daemon pour synchroniser.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
